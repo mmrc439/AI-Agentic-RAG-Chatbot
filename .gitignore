@@ -1,0 +1,19 @@
+# macOS system files
+.DS_Store
+
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# VSCode / IDE settings
+.vscode/
+.idea/
+
+# Local vector stores and datasets
+chroma_store/
+data/

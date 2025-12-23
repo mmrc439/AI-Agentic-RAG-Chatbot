@@ -1,0 +1,277 @@
+<!-- File: files.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Files - Ask Docs Bot</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="custom-navbar">
+    <div class="navbar-brand">
+      <a href="/"><img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" class="logo" /></a>
+      <span class="brand-text">Ask Docs Bot</span>
+      <button class="navbar-toggle" onclick="toggleMenu()">☰</button>
+    </div>
+    <nav class="navbar-links" id="navbar-links">
+      <a href="/" class="nav-link">Home</a>
+      <a href="/files.html" class="nav-link">Documents</a>
+      <a href="/chatbot.html" class="nav-link">Chatbot</a>
+      <a href="/about" class="nav-link">About Us</a>
+    </nav>
+  </header>
+
+  <main class="file-page-container">
+    <div class="file-header">
+      <input type="text" class="modern-search" placeholder="Search documents..." oninput="renderFiles()" />
+      <div class="pagination-controls">
+        <label for="docsPerPage">Docs per page:</label>
+        <select id="docsPerPage" onchange="updateDocsPerPage()">
+          <option value="5">5</option>
+          <option value="10" selected>10</option>
+          <option value="20">20</option>
+        </select>
+
+        <label for="typeFilter" style="margin-left:10px;">Type:</label>
+        <select id="typeFilter" onchange="renderFiles()">
+          <option value="all">All</option>
+          <option value="PDF">PDF</option>
+          <option value="DOCX">Word</option>
+        </select>
+
+        <label for="sortOrder" style="margin-left:10px;">Sort:</label>
+        <select id="sortOrder" onchange="renderFiles()">
+          <option value="latest">Latest</option>
+          <option value="oldest">Oldest</option>
+          <option value="az">A-Z</option>
+          <option value="za">Z-A</option>
+        </select>
+      </div>
+    </div>
+
+
+    <div class="file-container">
+      <div class="file-inbox" id="file-inbox"></div>
+    </div>
+
+    <div class="pagination-bar" id="pagination-bar"></div>
+
+    <div class="drag-drop-box drop-zone" id="drop-zone">
+      Drag & Drop your PDF or DOCX files here
+    </div>
+
+    <div class="file-actions">
+      <input type="file" id="uploadFiles" multiple accept=".pdf,.doc,.docx" hidden />
+      <button type="button" onclick="document.getElementById('uploadFiles').click()" class="attach-btn">📎 Choose Files</button>
+      <button type="button" class="delete-btn" id="delete-btn" style="display: none;">🗑️ Delete Selected</button>
+    </div>
+  </main>
+
+  <script>
+    const bust = () => `?_=${Date.now()}`;
+    let filesData = [], currentPage = 1, docsPerPage = 10;
+
+    function toggleMenu() {
+      document.getElementById("navbar-links").classList.toggle("show");
+    }
+
+    function toggleDeleteButton() {
+      const anySelected = document.querySelectorAll('.file-checkbox:checked').length > 0;
+      document.getElementById('delete-btn').style.display = anySelected ? 'inline-block' : 'none';
+    }
+
+    async function fetchAndRenderFiles() {
+      const res = await fetch(`/files${bust()}`);
+      filesData = await res.json();
+      currentPage = 1;
+      renderFiles();
+      renderPagination();
+    }
+
+    function renderFiles() {
+      const inbox = document.getElementById("file-inbox");
+      inbox.innerHTML = "";
+
+      const query = document.querySelector('.modern-search').value.toLowerCase();
+      const typeFilter = document.getElementById("typeFilter").value;
+      const sortOrder = document.getElementById("sortOrder").value;
+      const now = Date.now() / 1000;
+
+      let filtered = filesData.filter(f =>
+        f.name.toLowerCase().includes(query) &&
+        (typeFilter === 'all' || f.type === typeFilter)
+      );
+
+      if (sortOrder === "latest") filtered.sort((a, b) => b.timestamp - a.timestamp);
+      else if (sortOrder === "oldest") filtered.sort((a, b) => a.timestamp - b.timestamp);
+      else if (sortOrder === "az") filtered.sort((a, b) => a.name.localeCompare(b.name));
+      else if (sortOrder === "za") filtered.sort((a, b) => b.name.localeCompare(a.name));
+
+      const start = (currentPage - 1) * docsPerPage;
+      const paginated = filtered.slice(start, start + docsPerPage);
+
+      paginated.forEach(f => {
+        const row = document.createElement("div");
+        row.className = "file-row";
+        if (now - f.timestamp < 30) row.classList.add("new-file");
+
+        const uploadTime = new Date(f.timestamp * 1000).toLocaleString();
+        row.innerHTML = `
+          <input type="checkbox" class="file-checkbox" data-name="${f.name}" onchange="toggleDeleteButton()" />
+          <div class="file-details">
+            <div class="file-name">${f.name}</div>
+            <div class="file-meta">${f.type} • ${uploadTime}</div>
+          </div>`;
+        inbox.appendChild(row);
+      });
+
+      renderPagination(filtered.length);
+    }
+
+
+    function renderPagination() {
+      const bar = document.getElementById("pagination-bar");
+      bar.innerHTML = '';
+      const typeFilter = document.getElementById("typeFilter").value;
+      const filtered = typeFilter === "all" ? filesData : filesData.filter(f => f.type === typeFilter);
+      const totalPages = Math.ceil(filtered.length / docsPerPage);
+
+      for (let i = 1; i <= totalPages; i++) {
+        const btn = document.createElement("button");
+        btn.textContent = i;
+        btn.className = 'page-btn' + (i === currentPage ? ' active' : '');
+        btn.onclick = () => { currentPage = i; renderFiles(); renderPagination(); };
+        bar.appendChild(btn);
+      }
+    }
+
+    function updateDocsPerPage() {
+      docsPerPage = parseInt(document.getElementById("docsPerPage").value);
+      currentPage = 1;
+      renderFiles();
+      renderPagination();
+    }
+
+    function filterAndRender() {
+      currentPage = 1;
+      renderFiles();
+      renderPagination();
+    }
+
+    function uploadFilesWithProgress(fileList) {
+      if (!fileList.length) return;
+
+      const overlay = document.createElement('div');
+      overlay.className = 'upload-overlay';
+      overlay.innerHTML = `
+        <div class="upload-box">
+          <div id="upload-status">Uploading 0%</div>
+          <div class="progress-bar-bg"><div id="upload-bar" class="progress-bar-fg"></div></div>
+        </div>`;
+      document.body.appendChild(overlay);
+
+      const statusTxt = overlay.querySelector('#upload-status');
+      const bar = overlay.querySelector('#upload-bar');
+
+      const formData = new FormData();
+      Array.from(fileList).forEach(f => formData.append('files', f));
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/upload');
+
+      xhr.upload.addEventListener('progress', evt => {
+        if (evt.lengthComputable) {
+          const pct = Math.round((evt.loaded / evt.total) * 100);
+          statusTxt.textContent = `Uploading ${pct}%`;
+          bar.style.width = `${pct}%`;
+        }
+      });
+
+      xhr.onload = () => {
+        if (xhr.status === 200) {
+          statusTxt.textContent = 'Upload complete ✅';
+          bar.style.background = '#16a34a';
+          setTimeout(() => {
+            overlay.remove();
+            fetchAndRenderFiles();
+          }, 800);
+        } else {
+          statusTxt.textContent = `Error: Server responded with ${xhr.status}`;
+          bar.style.background = '#d73a49';
+          setTimeout(() => overlay.remove(), 3000);
+        }
+      };
+
+      xhr.onerror = () => {
+        statusTxt.textContent = 'Upload Failed. Server error.';
+        bar.style.background = '#d73a49';
+        setTimeout(() => overlay.remove(), 3000);
+      };
+
+      xhr.send(formData);
+    }
+
+    function liveSearchFiles() {
+      const query = document.querySelector('.modern-search').value.toLowerCase();
+      const inbox = document.getElementById("file-inbox");
+      inbox.innerHTML = '';
+
+      const typeFilter = document.getElementById("typeFilter").value;
+      const filtered = filesData.filter(f =>
+        f.name.toLowerCase().includes(query) &&
+        (typeFilter === 'all' || f.type === typeFilter)
+      );
+
+      filtered.slice(0, docsPerPage).forEach(f => {
+        const row = document.createElement('div');
+        row.className = 'file-row';
+        const uploadTime = new Date(f.timestamp * 1000).toLocaleString();
+        row.innerHTML = `
+          <input type="checkbox" class="file-checkbox" data-name="${f.name}" onchange="toggleDeleteButton()" />
+          <div class="file-details">
+            <div class="file-name">${f.name}</div>
+            <div class="file-meta">Type: ${f.type} | Uploaded: ${uploadTime}</div>
+          </div>`;
+        inbox.appendChild(row);
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const dropZone  = document.getElementById('drop-zone');
+      const fileInput = document.getElementById('uploadFiles');
+      const deleteBtn = document.getElementById('delete-btn');
+
+      fetchAndRenderFiles();
+
+      dropZone.addEventListener('dragover', e => {
+        e.preventDefault(); dropZone.classList.add('dragover');
+      });
+      dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+      dropZone.addEventListener('drop', e => {
+        e.preventDefault(); dropZone.classList.remove('dragover');
+        uploadFilesWithProgress(e.dataTransfer.files);
+      });
+
+      fileInput.addEventListener('change', () => {
+        uploadFilesWithProgress(fileInput.files);
+        fileInput.value = '';
+      });
+
+      deleteBtn.addEventListener('click', async () => {
+        const selected = Array.from(document.querySelectorAll('.file-checkbox:checked')).map(cb => cb.getAttribute('data-name'));
+        if (!selected.length) return;
+        if (!confirm(`Are you sure you want to delete ${selected.length} file(s)?`)) return;
+
+        await fetch('/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filenames: selected })
+        });
+
+        fetchAndRenderFiles();
+        toggleDeleteButton();
+      });
+    });
+  </script>
+</body>
+</html>

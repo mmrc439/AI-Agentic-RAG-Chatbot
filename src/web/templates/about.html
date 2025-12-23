@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>About - Agentic RAG</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+  <header class="custom-navbar">
+    <div class="navbar-brand">
+      <a href="/"><img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" class="logo" /></a>
+      <span class="brand-text">Ask Docs Bot</span>
+      <button class="navbar-toggle" onclick="toggleMenu()">☰</button>
+    </div>
+    <nav class="navbar-links" id="navbar-links">
+      <a href="/" class="nav-link">Home</a>
+      <a href="/files.html" class="nav-link">Documents</a>
+      <a href="/chatbot.html" class="nav-link">Chatbot</a>
+      <a href="/about" class="nav-link">About Us</a>
+    </nav>
+  </header>
+
+  <div class="container" style="justify-content: center; align-items: center;">
+    <h1>About Ask Docs Bot</h1>
+    <p style="color: #ccc;">
+      This tool uses Agentic RAG to answer queries from uploaded PDFs and DOCX files using LLMs with citations.
+    </p>
+  </div>
+
+  <script>
+    function toggleMenu() {
+      const nav = document.getElementById("navbar-links");
+      nav.classList.toggle("show");
+    }
+  </script>
+</body>
+</html>

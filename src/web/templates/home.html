@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Home - Agentic RAG</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<script>
+  function toggleMenu() {
+    const nav = document.getElementById("navbar-links");
+    nav.classList.toggle("show");
+  }
+</script>
+
+<body>
+  <header class="custom-navbar">
+    <div class="navbar-brand">
+      <a href="/"><img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" class="logo" /></a>
+      <span class="brand-text">Ask Docs Bot</span>
+      <button class="navbar-toggle" onclick="toggleMenu()">☰</button>
+    </div>
+    <nav class="navbar-links" id="navbar-links">
+      <a href="/" class="nav-link">Home</a>
+      <a href="/files.html" class="nav-link">Documents</a>
+      <a href="/chatbot.html" class="nav-link">Chatbot</a>
+      <a href="/about" class="nav-link">About Us</a>
+    </nav>
+  </header>
+
+  <div class="container" style="justify-content: center; align-items: center;">
+    <h1>Welcome to Ask Docs Bot</h1>
+    <p style="color: #ccc;">Upload documents, ask questions, and get instant answers with citations.</p>
+  </div>
+</body>
+</html>

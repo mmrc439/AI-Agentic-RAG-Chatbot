@@ -1,0 +1,44 @@
+# Core App Framework
+Flask>=2.2.3
+Werkzeug>=2.2.3
+
+# File upload & security
+python-docx>=0.8.11
+PyMuPDF==1.24.4
+
+# NLP and Tokenization
+nltk>=3.7
+tiktoken>=0.4.0
+sentence-transformers>=2.2.2
+
+# Embeddings, Vector DB, RAG
+chromadb==0.4.24
+langchain>=0.0.254
+langchain-core>=0.0.146
+langchain-community>=0.0.31
+langchain-huggingface>=0.0.66
+langchain-chroma>=0.1.0
+langgraph>=0.0.9
+
+# LLMs & Transformers
+transformers>=4.30.0
+# torch==2.0.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+torch
+huggingface-hub>=0.14.1
+
+# Similarity, Fuzzy Matching
+rapidfuzz>=2.15.1
+rank-bm25>=0.2.2
+
+# Roman‑numeral support
+roman>=3.0.0
+
+# Web APIs & Utilities
+openai>=0.27.0
+requests>=2.28.1
+
+# System Utilities
+numpy>=1.23.5,<2.0.0
+python-dotenv>=1.0.0
+pillow
+jinja2

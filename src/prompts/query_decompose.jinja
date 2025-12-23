@@ -1,0 +1,47 @@
+You split a user message into the SMALLEST set of *stand‑alone* QUESTIONS.
+
+A stand‑alone question is one that can be understood WITHOUT prior chat.
+If the user refers to something with pronouns ("it", "them", "those", "that", "the above"),
+rewrite the question by INJECTING the referenced subject from the chat history
+OR from an earlier question in the same input. Use the most specific noun phrase available.
+
+CHAT HISTORY (≤4 recent turns)
+{{ chat_disp }}
+
+NEW USER INPUT
+"""{{ user_q }}"""
+
+RULES
+• If the input is clearly ONE question → output it verbatim (add '?' if missing) then `===END===`.
+• Split ONLY when there are multiple actual questions (multiple '?', or clearly separable full questions joined by 'and', ';', '/', 'Now:', etc.).
+• DO NOT invent extra sub‑questions; enumeration ("What are the three pillars...") stays ONE line.
+• Every output line MUST end with '?' and must already include any expanded referents (no dangling pronouns).
+• Keep each question concise; do not summarize the whole chat.
+
+FOLLOW‑UP EXPANSION EXAMPLES
+Input: What is ALARA? How does it minimise exposure?
+Output:
+What is ALARA?
+How does ALARA minimise exposure?
+===END===
+
+Input: Where does REGDOC-2.4.4 describe the four-step hierarchy of design measures? Explain those 4 steps
+Output:
+Where does REGDOC-2.4.4 describe the four-step hierarchy of design measures?
+Explain the four-step hierarchy of design measures in REGDOC-2.4.4?
+===END===
+
+Input: Where does REGDOC-2.4.4 describe the four-step hierarchy of design measures?
+Output:
+Where does REGDOC-2.4.4 describe the four-step hierarchy of design measures?
+===END===
+
+
+Input: Which bias detection models are used in the News classification report? Explain those models
+Output:
+Which bias detection models are used in the News classification report?
+Explain the BiLSTM and DistilBERT bias detection models used in the News classification report?
+===END===
+
+
+Begin your list NOW:

@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Chatbot - Agentic RAG</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <!-- Markdown renderer for nice headings/lists -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <!-- Minimal styles for the status bubble + spinner -->
+  <style>
+    .status-bubble {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      margin: 8px 0;
+      background: #f4f6fb;
+      border: 1px solid #e0e6f2;
+      color: #3d4966;
+      border-radius: 12px;
+      /* keep swaps snappy; remove if you want fades */
+      transition: none !important;
+    }
+    .status-bubble span { transition: none !important; }
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid #c9d4ef;
+      border-top-color: #5166d6;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex: 0 0 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+
+<body>
+  <header class="custom-navbar">
+    <div class="navbar-brand">
+      <a href="/"><img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" class="logo" /></a>
+      <span class="brand-text">Ask Docs Bot</span>
+      <button class="navbar-toggle" onclick="toggleMenu()">☰</button>
+    </div>
+    <nav class="navbar-links" id="navbar-links">
+      <a href="/" class="nav-link">Home</a>
+      <a href="/files.html" class="nav-link">Documents</a>
+      <a href="/chatbot.html" class="nav-link">Chatbot</a>
+      <a href="/about" class="nav-link">About Us</a>
+    </nav>
+  </header>
+
+  <div class="container">
+    <aside class="sidebar">
+      <button class="btn new-chat" onclick="startNewChat()">+ New Chat</button>
+      <h3>Chat History</h3>
+      <ul class="history" id="chat-history-list"></ul>
+    </aside>
+
+    <main class="main-content">
+      <div class="chat-header">
+        <span class="model-pill">Open AI</span>
+      </div>
+
+      <div class="chat-area" id="chat-area"></div>
+
+      <form class="chat-input" id="chat-form">
+        <input type="file" id="fileUpload" hidden multiple />
+        <label for="fileUpload" class="attach-icon">📎</label>
+        <input type="text" placeholder="Type a message..." required />
+
+        <span class="switch-label">Web Search</span>
+        <label class="switch">
+          <input type="checkbox" id="web-search-toggle" />
+          <span class="slider"></span>
+        </label>
+        <button type="submit" class="send-btn">➤</button>
+      </form>
+    </main>
+  </div>
+
+  <script>
+    /* ---------- Status bubble controller with spinner ---------- */
+    function createStatusController(area) {
+      const wrap  = document.createElement("div");
+      wrap.className = "status-bubble";
+
+      const spin  = document.createElement("span");
+      spin.className = "spinner";
+
+      const label = document.createElement("span");
+      label.textContent = "Fetching…";
+
+      wrap.append(spin, label);
+      area.appendChild(wrap);
+
+      let timerId = null;
+      let active  = false;
+
+      const api = {
+        set(txt) { label.textContent = txt; },
+
+        // durations: number (same for all) OR number[] (per-stage)
+        start(stages, durations) {
+          active = true;
+          let i = 0;
+
+          const delayFor = (idx) =>
+            Array.isArray(durations)
+              ? (durations[idx] ?? durations.at(-1) ?? 2000)
+              : (typeof durations === "number" ? durations : 2000);
+
+          const advance = () => {
+            if (!active) return;
+            label.textContent = stages[i];
+            timerId = setTimeout(() => {
+              i = (i + 1) % stages.length;
+              advance();
+            }, delayFor(i));
+          };
+          advance();
+        },
+
+        stop() {
+          active = false;
+          if (timerId) { clearTimeout(timerId); timerId = null; }
+        },
+
+        remove() {
+          this.stop();
+          if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+        },
+
+        get el() { return wrap; }
+      };
+
+      return api;
+    }
+
+    /* ---------- Navbar ---------- */
+    function toggleMenu() {
+      const nav = document.getElementById("navbar-links");
+      nav.classList.toggle("show");
+    }
+
+    /* ---------- Chat sessions ---------- */
+    let currentChatId = localStorage.getItem("chat_id") || null;
+
+    async function startNewChat() {
+      const res = await fetch("/chat/start", { method: "POST" });
+      const data = await res.json();
+      currentChatId = data.session_id;
+      localStorage.setItem("chat_id", currentChatId);
+      await loadChatSessions();
+      await loadChatHistory(currentChatId);
+    }
+
+    async function loadChatSessions() {
+      const res = await fetch("/chat/sessions", { method: "POST" });
+      const sessions = await res.json();
+      const list = document.getElementById("chat-history-list");
+      list.innerHTML = "";
+      sessions.forEach(sess => {
+        const item = document.createElement("li");
+
+        const label = document.createElement("span");
+        label.textContent = sess.name;
+        label.dataset.id = sess.id;
+        if (sess.id === currentChatId) label.classList.add("active-session");
+        label.onclick = () => {
+          currentChatId = sess.id;
+          localStorage.setItem("chat_id", sess.id);
+          loadChatSessions();
+          loadChatHistory(sess.id);
+        };
+
+        const renameBtn = document.createElement("button");
+        renameBtn.textContent = "✏️";
+        renameBtn.onclick = async e => {
+          e.stopPropagation();
+          const input = document.createElement("input");
+          input.value = label.textContent;
+          input.onkeydown = async ev => {
+            if (ev.key === "Enter") {
+              await fetch("/chat/rename", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ chat_id: sess.id, new_name: input.value })
+              });
+              loadChatSessions();
+            }
+          };
+          item.replaceChild(input, label);
+          input.focus();
+        };
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "🗑️";
+        deleteBtn.onclick = async e => {
+          e.stopPropagation();
+          await fetch("/chat/delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: sess.id })
+          });
+          if (currentChatId === sess.id) {
+            localStorage.removeItem("chat_id");
+            currentChatId = null;
+            await startNewChat();
+          } else {
+            await loadChatSessions();
+          }
+        };
+
+        item.append(label, renameBtn, deleteBtn);
+        list.appendChild(item);
+      });
+    }
+
+    /* ---------- Rendering ---------- */
+    function appendBotBubble(area, answerText, sections) {
+      const bubble = document.createElement("div");
+      bubble.className = "bot-bubble";
+
+      // Answer (markdown)
+      const ans = document.createElement("div");
+      ans.className = "answer-md";
+      try { ans.innerHTML = marked.parse(answerText || ""); }
+      catch { ans.textContent = answerText || ""; }
+      bubble.appendChild(ans);
+
+      // helper to create collapsible list section
+      function makeListSection(title, items) {
+        if (!Array.isArray(items) || items.length === 0) return null;
+        const details = document.createElement("details");
+        details.className = "collapsible-section";
+        const summary = document.createElement("summary");
+        summary.textContent = title;
+        details.appendChild(summary);
+        const ul = document.createElement("ul");
+        items.forEach(x => {
+          const li = document.createElement("li");
+          li.textContent = String(x).replace(/^\s*[-•●▪︎]+\s*/, "").trim();
+          ul.appendChild(li);
+        });
+        details.appendChild(ul);
+        return details;
+      }
+
+      const S = sections || {};
+      const srcCard = makeListSection("Sources", S.sources || []);
+      const reqCard = makeListSection("Requirements", S.requirements || []);
+      const extCard = makeListSection("External references", S.external_refs || []);
+      const subCard = makeListSection("Subtopics", S.subtopics || []);
+      const nxtCard = makeListSection("Suggested Follow-up Questions", S.next_questions || []);
+
+      [srcCard, reqCard, extCard, subCard, nxtCard].forEach(card => {
+        if (card) bubble.appendChild(card);
+      });
+
+      // Make source filenames clickable to /Docs/<file>#page=n if pattern matches
+      if (srcCard) {
+        const fileRegex = /([A-Za-z0-9_\- .]+?\.(pdf|docx|doc))/i;
+        const pageRegex = /\bp\.\s*(\d+)\b/i;
+        srcCard.querySelectorAll("li").forEach(li => {
+          const s = li.textContent;
+          const fm = s.match(fileRegex);
+          if (fm) {
+            const filename = fm[1];
+            const pm = s.match(pageRegex);
+            const a = document.createElement("a");
+            a.href = `/Docs/${encodeURIComponent(filename)}${pm ? "#page=" + pm[1] : ""}`;
+            a.target = "_blank";
+            a.textContent = s;
+            li.textContent = "";
+            li.appendChild(a);
+          }
+        });
+      }
+
+      area.appendChild(bubble);
+    }
+
+    /* ---------- History utilities ---------- */
+    function normText(s) {
+      return (s || "")
+        .normalize("NFKC")
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    async function loadChatHistory(chatId) {
+      const res = await fetch("/chat/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId })
+      });
+      const history = await res.json();
+      const area = document.getElementById("chat-area");
+
+      while (area.firstChild) area.removeChild(area.firstChild);
+
+      const chronological = [...history].reverse();
+
+      const collapsed = [];
+      for (const h of chronological) {
+        const role = (h.meta && h.meta.role) || "user";
+        const textN = normText(h.text || "");
+        const last = collapsed[collapsed.length - 1];
+        const isConsecutiveUserDup =
+          last && last.meta && last.meta.role === "user" &&
+          role === "user" && normText(last.text || "") === textN;
+        if (isConsecutiveUserDup) {
+          last._repeat = (last._repeat || 1) + 1;
+        } else {
+          const copy = { ...h, _repeat: 1 };
+          collapsed.push(copy);
+        }
+      }
+
+      collapsed.forEach(h => {
+        const role = (h.meta && h.meta.role) || "user";
+        const text = h.text || "";
+
+        if (role === "user") {
+          const userMsg = document.createElement("div");
+          userMsg.className = "user-bubble";
+          userMsg.textContent = text;
+          if (h._repeat > 1) {
+            const badge = document.createElement("span");
+            badge.textContent = ` ×${h._repeat}`;
+            badge.style.opacity = "0.7";
+            badge.style.marginLeft = "6px";
+            badge.style.fontSize = "0.85em";
+            userMsg.appendChild(badge);
+          }
+          area.appendChild(userMsg);
+          return;
+        }
+
+        // assistant meta may be arrays or JSON strings
+        const parseMaybeJSON = v => {
+          if (Array.isArray(v)) return v;
+          if (typeof v === "string" && v.trim()) {
+            try { return JSON.parse(v); } catch { return []; }
+          }
+          return [];
+        };
+
+        const sections = {
+          sources:        parseMaybeJSON(h.meta?.sources),
+          requirements:   parseMaybeJSON(h.meta?.requirements),
+          external_refs:  parseMaybeJSON(h.meta?.external_refs),
+          subtopics:      parseMaybeJSON(h.meta?.subtopics),
+          next_questions: parseMaybeJSON(h.meta?.next_questions),
+        };
+
+        appendBotBubble(area, text, sections);
+      });
+
+      area.scrollTop = area.scrollHeight;
+    }
+
+    /* ---------- Submit handler (with spinner stages) ---------- */
+    document.getElementById("chat-form").addEventListener("submit", async e => {
+      e.preventDefault();
+      const input = e.target.querySelector("input[type='text']");
+      const message = input.value.trim();
+      if (!message) return;
+
+      const webSearch = document.getElementById("web-search-toggle").checked;
+
+      // Show user message immediately
+      const area = document.getElementById("chat-area");
+      const userMsg = document.createElement("div");
+      userMsg.className = "user-bubble";
+      userMsg.textContent = message;
+      area.appendChild(userMsg);
+      area.scrollTop = area.scrollHeight;
+      input.value = "";
+
+      // one controller at a time
+      if (window.__statusController) {
+        try { window.__statusController.remove(); } catch {}
+        window.__statusController = null;
+      }
+      const status = createStatusController(area);
+      window.__statusController = status;
+
+      const stagesLocal = [
+        "Understanding the query…",
+        "Retrieving…",
+        "Reranking…",
+        "Confirming the sources…",
+        "Synthesizing…",
+        "Generating answer…"
+      ];
+      const stagesWeb = [
+        "Understanding the query…",
+        "Retrieving from docs…",
+        "Reranking…",
+        "Searching the web…",
+        "Collecting web evidence…",
+        "Confirming the sources…",
+        "Synthesizing…",
+        "Generating answer…"
+      ];
+
+      // change this to control each stage duration (ms)
+      const perStageMs = 3200;
+
+      status.start(webSearch ? stagesWeb : stagesLocal, perStageMs);
+
+      try {
+        await fetch("/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message, chat_id: currentChatId, web_search: webSearch })
+        });
+
+        await loadChatHistory(currentChatId);
+      } catch (err) {
+        status.set("Something went wrong. Please try again.");
+        await new Promise(r => setTimeout(r, 2000));
+      } finally {
+        if (window.__statusController) {
+          window.__statusController.remove();
+          window.__statusController = null;
+        }
+      }
+    });
+
+    /* ---------- Boot ---------- */
+    window.addEventListener("DOMContentLoaded", async () => {
+      const res = await fetch("/chat/sessions", { method: "POST" });
+      const sessions = await res.json();
+      if (!currentChatId || !sessions.find(s => s.id === currentChatId)) {
+        await startNewChat();
+      } else {
+        await loadChatSessions();
+        await loadChatHistory(currentChatId);
+      }
+    });
+  </script>
+</body>
+</html>
